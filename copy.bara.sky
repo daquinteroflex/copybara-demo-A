@@ -1,0 +1,70 @@
+# Copybara Configuration for Demo Repositories
+#
+# This configuration defines bidirectional sync between:
+#   - copybara-demo-A (source of truth with private/ and public/ directories)
+#   - copybara-demo-B (public mirror with flattened structure)
+#
+# Two workflows are defined:
+#   1. public_to_mirror: Syncs A's public/test_repo/ → B's root (A→B)
+#   2. mirror_to_public: Syncs B's root → A's public/test_repo/ (B→A)
+
+# Workflow 1: A → B (Primary Sync)
+# Syncs public code from demo-A to demo-B
+# Transforms: public/test_repo/ → root directory
+core.workflow(
+    name = "public_to_mirror",
+    origin = git.origin(
+        url = "https://github.com/daquinteroflex/copybara-demo-A.git",
+        ref = "main",
+    ),
+    destination = git.destination(
+        url = "https://github.com/daquinteroflex/copybara-demo-B.git",
+        fetch = "main",
+        push = "main",
+    ),
+    # Only include files from public/test_repo/ directory
+    origin_files = glob(["public/test_repo/**"]),
+
+    # Preserve commit author information
+    authoring = authoring.pass_thru("Default <default@example.com>"),
+
+    # Transform directory structure: move public/test_repo/ contents to root
+    transformations = [
+        core.move("public/test_repo", ""),
+    ],
+
+    # Mode for handling the sync
+    mode = "SQUASH",
+)
+
+# Workflow 2: B → A (Contribution Flow)
+# Syncs contributions from demo-B back to demo-A
+# Transforms: root directory → public/test_repo/
+core.workflow(
+    name = "mirror_to_public",
+    origin = git.origin(
+        url = "https://github.com/daquinteroflex/copybara-demo-B.git",
+        ref = "main",
+    ),
+    destination = git.destination(
+        url = "https://github.com/daquinteroflex/copybara-demo-A.git",
+        fetch = "main",
+        push = "main",
+    ),
+    # Include all files from demo-B root
+    origin_files = glob(["**"]),
+
+    # Only modify files in public/test_repo/ directory in demo-A
+    destination_files = glob(["public/test_repo/**"]),
+
+    # Preserve commit author information
+    authoring = authoring.pass_thru("Default <default@example.com>"),
+
+    # Transform directory structure: move root contents to public/test_repo/
+    transformations = [
+        core.move("", "public/test_repo"),
+    ],
+
+    # Mode for handling the sync
+    mode = "SQUASH",
+)
