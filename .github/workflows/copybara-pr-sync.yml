@@ -39,7 +39,7 @@ jobs:
         with:
           repository: daquinteroflex/copybara-demo-A
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.COPYBARA_DEMO_TOKEN }}
           sparse-checkout: |
             copy.bara.sky
             public/test_repo
@@ -65,7 +65,7 @@ jobs:
       - name: Run Copybara PR Import (Specific PR)
         if: inputs.pr_number != ''
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
           PR_NUMBER: ${{ inputs.pr_number }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
@@ -105,7 +105,7 @@ jobs:
       - name: Run Copybara PR Import (All Ready PRs)
         if: inputs.pr_number == ''
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           echo "=== Current working directory ==="
@@ -137,7 +137,7 @@ jobs:
       - name: Check for created PR
         if: inputs.dry_run != true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
         run: |
           echo "=== Checking for newly created PRs ==="
           # List recent PRs
