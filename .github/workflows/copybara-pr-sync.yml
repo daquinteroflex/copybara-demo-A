@@ -115,6 +115,11 @@ jobs:
 
           echo "=== Running copybara for PR #${PR_NUMBER} ==="
 
+          # Get the base branch commit for baseline
+          echo "=== Fetching baseline from demo-B main branch ==="
+          BASELINE=$(gh api repos/daquinteroflex/copybara-demo-B/git/refs/heads/main --jq '.object.sha')
+          echo "Baseline commit: ${BASELINE}"
+
           # Build copybara command
           COPYBARA_CMD="copybara migrate \
             ${GITHUB_WORKSPACE}/copy.bara.sky \
@@ -122,6 +127,7 @@ jobs:
             ${PR_NUMBER} \
             --git-destination-url=\"https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-A.git\" \
             --github-destination-pr-branch=\"copybara/import-pr-${PR_NUMBER}-$(date +%Y%m%d-%H%M%S)\" \
+            --baseline-for-merge-import=\"${BASELINE}\" \
             --verbose"
 
           # Add dry-run flag if requested
@@ -166,6 +172,11 @@ jobs:
 
           echo "Found PRs: $PR_LIST"
 
+          # Get the base branch commit for baseline
+          echo "=== Fetching baseline from demo-B main branch ==="
+          BASELINE=$(gh api repos/daquinteroflex/copybara-demo-B/git/refs/heads/main --jq '.object.sha')
+          echo "Baseline commit: ${BASELINE}"
+
           # Import each PR
           SUCCESS_COUNT=0
           FAIL_COUNT=0
@@ -182,6 +193,7 @@ jobs:
               ${PR_NUM} \
               --git-destination-url=\"https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-A.git\" \
               --github-destination-pr-branch=\"copybara/import-pr-${PR_NUM}-$(date +%Y%m%d-%H%M%S)\" \
+              --baseline-for-merge-import=\"${BASELINE}\" \
               --verbose"
 
             # Add dry-run flag if requested
