@@ -86,7 +86,7 @@ github_api_demo_b = git.github_api(
 # Workflow 3: Import PRs from demo-B (EVENT-DRIVEN)
 # ============================================================================
 # This workflow monitors PRs in demo-B and imports them to demo-A
-# when specific criteria are met (labels, approvals, status checks)
+# ALL OPEN PRs will be automatically synced (no labels or approvals required)
 
 core.workflow(
     name = "import_pr_from_b",
@@ -97,9 +97,8 @@ core.workflow(
         # PR must be in OPEN state to be imported
         state = "OPEN",
 
-        # Require specific labels before importing
-        # PRs must have "copybara:import" label to be synced
-        required_labels = ["copybara:import"],
+        # NO LABEL REQUIREMENTS - All open PRs will be synced
+        # NO REVIEW REQUIREMENTS - PRs sync automatically
 
         # Optional: Require specific status checks to pass
         # Uncomment and modify as needed:
@@ -108,12 +107,6 @@ core.workflow(
         # Optional: Require specific check runs to succeed
         # Uncomment and modify as needed:
         # required_check_runs = ["unit-tests", "linter"],
-
-        # Require PR to be approved before import
-        review_state = "HEAD_COMMIT_APPROVED",
-
-        # Who can approve: COLLABORATOR, MEMBER, or OWNER
-        review_approvers = ["COLLABORATOR", "MEMBER", "OWNER"],
 
         # Use the PR head (not merge commit)
         use_merge = False,
@@ -206,9 +199,9 @@ core.feedback(
 #    copybara copy.bara.sky import_pr_from_b --github-pr-number=5
 #
 #    Requirements for import:
-#    - PR must have "copybara:import" label
-#    - PR must be approved by COLLABORATOR/MEMBER/OWNER
 #    - PR must be in OPEN state
+#    - NO LABELS REQUIRED (removed)
+#    - NO APPROVALS REQUIRED (removed)
 #    - Optional status checks must pass (if configured)
 
 # 2. RUN FEEDBACK WORKFLOW:
@@ -231,9 +224,9 @@ core.feedback(
 #
 #    Preview what would be imported without making changes
 
-# 5. COMMAND LINE FLAGS:
+# 5. COMMAND LINE FLAGS (OPTIONAL FILTERS):
 #    --github-required-label=<LABEL>
-#        Override required labels for PR import
+#        Add label requirements (not configured by default)
 #
 #    --github-required-status-context-name=<NAME>
 #        Add required status check names
