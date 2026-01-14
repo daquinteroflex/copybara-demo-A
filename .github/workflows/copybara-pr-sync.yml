@@ -222,13 +222,13 @@ jobs:
             # Check result based on exit code
             if [ $EXIT_CODE -eq 0 ]; then
               echo "✅ Successfully imported PR #${PR_NUM}"
-              ((SUCCESS_COUNT++))
+              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
             elif [ $EXIT_CODE -eq 4 ]; then
               echo "⏭️  PR #${PR_NUM} skipped (no changes or already imported)"
-              ((SKIPPED_COUNT++))
+              SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
             else
               echo "❌ Failed to import PR #${PR_NUM} (exit code: ${EXIT_CODE})"
-              ((FAIL_COUNT++))
+              FAIL_COUNT=$((FAIL_COUNT + 1))
             fi
           done
 
