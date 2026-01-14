@@ -153,40 +153,8 @@ core.workflow(
 # ============================================================================
 # Workflow 4: Automated PR Feedback (TRIGGER-BASED)
 # ============================================================================
-# This workflow responds to GitHub events and provides automated feedback
-# on PRs in demo-B (comments, labels, status checks)
-
-core.feedback(
-    name = "pr_feedback",
-
-    # GitHub trigger configuration - monitors demo-B for PR events
-    trigger = git.github_trigger(
-        url = "https://github.com/daquinteroflex/copybara-demo-B",
-
-        # Subscribe to specific GitHub events
-        events = [
-            "PULL_REQUEST",                # PR opened, closed, updated
-            "PULL_REQUEST_REVIEW_COMMENT", # Comments on PR
-            "STATUS",                      # Status checks updated
-            "CHECK_RUNS",                  # Check runs completed
-        ],
-
-        # Optional: API checker for validation
-        # checker = some_checker,
-    ),
-
-    # Origin endpoint (where feedback comes from)
-    origin = github_api_demo_b,
-
-    # Destination endpoint (where to post feedback)
-    destination = github_api_demo_b,
-
-    # Actions to perform when triggered
-    actions = [
-        # This is a placeholder - actual implementation would use ctx object
-        # See examples below for full implementation
-    ],
-)
+# REMOVED: core.feedback() workflow removed for simplicity
+# For basic PR syncing, the import_pr_from_b workflow is sufficient
 
 # ============================================================================
 # USAGE INSTRUCTIONS
