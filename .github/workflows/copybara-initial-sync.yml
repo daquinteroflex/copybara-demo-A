@@ -1,0 +1,112 @@
+name: Copybara Initial Sync
+
+on:
+  # Manual trigger only - run once to establish baseline
+  workflow_dispatch:
+    inputs:
+      workflow:
+        description: 'Workflow to run for initial sync'
+        required: true
+        type: choice
+        options:
+          - mirror_to_public
+          - public_to_mirror
+        default: mirror_to_public
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  initial-sync:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/anipos/copybara-docker-image
+
+    steps:
+      - name: Checkout demo-A repo
+        uses: actions/checkout@v4
+        with:
+          repository: daquinteroflex/copybara-demo-A
+          fetch-depth: 0
+          token: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+          sparse-checkout: |
+            copy.bara.sky
+            public/test_repo
+            .gitignore
+            .gitattributes
+          sparse-checkout-cone-mode: false
+
+      - name: Verify checkout
+        run: |
+          echo "=== Workspace contents ==="
+          ls -la
+          echo "=== copy.bara.sky exists ==="
+          ls -la copy.bara.sky || echo "ERROR: copy.bara.sky not found"
+          echo "=== public/test_repo contents ==="
+          ls -la public/test_repo/ || echo "Directory not found"
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "Copybara Bot"
+          git config --global user.email "copybara@example.com"
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
+      - name: Run Initial Copybara Sync
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+          WORKFLOW: ${{ inputs.workflow }}
+        run: |
+          echo "=== Running initial sync for workflow: ${WORKFLOW} ==="
+
+          if [ "${WORKFLOW}" = "mirror_to_public" ]; then
+            # Sync from demo-B to demo-A (establishes baseline for PR imports)
+            copybara migrate \
+              ${GITHUB_WORKSPACE}/copy.bara.sky \
+              mirror_to_public \
+              --init-history \
+              --git-destination-url="https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-A.git" \
+              --verbose
+          elif [ "${WORKFLOW}" = "public_to_mirror" ]; then
+            # Sync from demo-A to demo-B
+            copybara migrate \
+              ${GITHUB_WORKSPACE}/copy.bara.sky \
+              public_to_mirror \
+              --init-history \
+              --git-destination-url="https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-B.git" \
+              --verbose
+          else
+            echo "❌ Invalid workflow: ${WORKFLOW}"
+            exit 1
+          fi
+
+      - name: Output Summary
+        if: always()
+        env:
+          WORKFLOW: ${{ inputs.workflow }}
+        run: |
+          echo "### Copybara Initial Sync 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Workflow:** ${WORKFLOW}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Purpose:** Establish baseline for future PR imports" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Initial sync completed successfully!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "You can now run PR imports with the copybara-pr-sync workflow." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Initial sync failed. Check the logs above." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "### ❌ Copybara Initial Sync Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The initial sync failed. This is required before PR imports can work." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Common issues:" >> $GITHUB_STEP_SUMMARY
+          echo "- Repository authentication issues" >> $GITHUB_STEP_SUMMARY
+          echo "- Configuration syntax errors in copy.bara.sky" >> $GITHUB_STEP_SUMMARY
+          echo "- Permission issues with COPYBARA_DEMO_TOKEN" >> $GITHUB_STEP_SUMMARY
