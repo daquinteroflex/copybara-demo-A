@@ -131,7 +131,6 @@ jobs:
             import_pr_from_b \
             ${PR_NUMBER} \
             --git-destination-url=\"https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-A.git\" \
-            --github-destination-pr-branch=\"copybara/import-pr-${PR_NUMBER}-$(date +%Y%m%d-%H%M%S)\" \
             --baseline-for-merge-import=\"${SOURCE_BASELINE}\" \
             --change-request-parent=\"${DEST_PARENT}\" \
             --verbose"
@@ -203,7 +202,6 @@ jobs:
               import_pr_from_b \
               ${PR_NUM} \
               --git-destination-url=\"https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-A.git\" \
-              --github-destination-pr-branch=\"copybara/import-pr-${PR_NUM}-$(date +%Y%m%d-%H%M%S)\" \
               --baseline-for-merge-import=\"${SOURCE_BASELINE}\" \
               --change-request-parent=\"${DEST_PARENT}\" \
               --verbose"
@@ -255,7 +253,7 @@ jobs:
             --repo daquinteroflex/copybara-demo-A \
             --limit 5 \
             --state open \
-            --search "copybara/import" \
+            --search "copybara-import" \
             --json number,title,headRefName,createdAt
 
       - name: Output Summary

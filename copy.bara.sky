@@ -121,10 +121,16 @@ core.workflow(
         # branch = "main",
     ),
 
-    destination = git.destination(
+    # Use github_pr_destination to automatically create PRs in demo-A
+    destination = git.github_pr_destination(
         url = "https://github.com/daquinteroflex/copybara-demo-A.git",
-        fetch = "main",
-        push = "main",
+        destination_ref = "main",
+        pr_branch = "copybara-import-${GITHUB_PR_NUMBER}",
+        title = "Import PR #${GITHUB_PR_NUMBER}: ${GITHUB_PR_TITLE}",
+        body = "This PR imports changes from demo-B PR #${GITHUB_PR_NUMBER}\n\n" +
+               "**Original PR:** ${GITHUB_PR_URL}\n" +
+               "**Author:** @${GITHUB_PR_USER}\n\n" +
+               "---\n${GITHUB_PR_BODY}",
     ),
 
     # Include all files from PR
