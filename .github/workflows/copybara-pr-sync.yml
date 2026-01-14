@@ -115,10 +115,15 @@ jobs:
 
           echo "=== Running copybara for PR #${PR_NUMBER} ==="
 
-          # Get the base branch commit for baseline
+          # Get the base branch commit for baseline (source)
           echo "=== Fetching baseline from demo-B main branch ==="
-          BASELINE=$(gh api repos/daquinteroflex/copybara-demo-B/git/refs/heads/main --jq '.object.sha')
-          echo "Baseline commit: ${BASELINE}"
+          SOURCE_BASELINE=$(gh api repos/daquinteroflex/copybara-demo-B/git/refs/heads/main --jq '.object.sha')
+          echo "Source baseline commit: ${SOURCE_BASELINE}"
+
+          # Get the parent commit from destination (demo-A main)
+          echo "=== Fetching parent from demo-A main branch ==="
+          DEST_PARENT=$(gh api repos/daquinteroflex/copybara-demo-A/git/refs/heads/main --jq '.object.sha')
+          echo "Destination parent commit: ${DEST_PARENT}"
 
           # Build copybara command
           COPYBARA_CMD="copybara migrate \
@@ -127,7 +132,8 @@ jobs:
             ${PR_NUMBER} \
             --git-destination-url=\"https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-A.git\" \
             --github-destination-pr-branch=\"copybara/import-pr-${PR_NUMBER}-$(date +%Y%m%d-%H%M%S)\" \
-            --baseline-for-merge-import=\"${BASELINE}\" \
+            --baseline-for-merge-import=\"${SOURCE_BASELINE}\" \
+            --change-request-parent=\"${DEST_PARENT}\" \
             --verbose"
 
           # Add dry-run flag if requested
@@ -172,10 +178,15 @@ jobs:
 
           echo "Found PRs: $PR_LIST"
 
-          # Get the base branch commit for baseline
+          # Get the base branch commit for baseline (source)
           echo "=== Fetching baseline from demo-B main branch ==="
-          BASELINE=$(gh api repos/daquinteroflex/copybara-demo-B/git/refs/heads/main --jq '.object.sha')
-          echo "Baseline commit: ${BASELINE}"
+          SOURCE_BASELINE=$(gh api repos/daquinteroflex/copybara-demo-B/git/refs/heads/main --jq '.object.sha')
+          echo "Source baseline commit: ${SOURCE_BASELINE}"
+
+          # Get the parent commit from destination (demo-A main)
+          echo "=== Fetching parent from demo-A main branch ==="
+          DEST_PARENT=$(gh api repos/daquinteroflex/copybara-demo-A/git/refs/heads/main --jq '.object.sha')
+          echo "Destination parent commit: ${DEST_PARENT}"
 
           # Import each PR
           SUCCESS_COUNT=0
@@ -193,7 +204,8 @@ jobs:
               ${PR_NUM} \
               --git-destination-url=\"https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-A.git\" \
               --github-destination-pr-branch=\"copybara/import-pr-${PR_NUM}-$(date +%Y%m%d-%H%M%S)\" \
-              --baseline-for-merge-import=\"${BASELINE}\" \
+              --baseline-for-merge-import=\"${SOURCE_BASELINE}\" \
+              --change-request-parent=\"${DEST_PARENT}\" \
               --verbose"
 
             # Add dry-run flag if requested
