@@ -4,11 +4,22 @@
 #   - copybara-demo-A (source of truth with private/ and public/ directories)
 #   - copybara-demo-B (public mirror with flattened structure)
 #
-# Four workflows are defined:
+# Workflows defined:
 #   1. public_to_mirror: Syncs A's public/test_repo/ → B's root (A→B)
 #   2. mirror_to_public: Syncs B's root → A's public/test_repo/ (B→A)
-#   3. import_pr_from_b: Imports PRs from demo-B to demo-A (EVENT-DRIVEN)
-#   4. pr_feedback: Automated feedback on demo-B PRs (TRIGGER-BASED)
+#   3. import_pr_from_b: Imports PRs from demo-B to demo-A (NEW)
+#   4. pr_feedback: Automated feedback on demo-B PRs (NEW)
+
+# GitHub API endpoint configuration
+github_api = git.github_api(
+    url = "https://github.com/daquinteroflex/copybara-demo-B",
+    # Optional: Add checker for API validation
+    # checker = some_checker,
+)
+
+# ============================================================================
+# ORIGINAL WORKFLOWS
+# ============================================================================
 
 # Workflow 1: A → B (Primary Sync)
 # Syncs public code from demo-A to demo-B
@@ -72,22 +83,13 @@ core.workflow(
 )
 
 # ============================================================================
-# GitHub API Configuration
+# NEW: PR IMPORT WORKFLOW
 # ============================================================================
 
-# GitHub API endpoint for demo-B (used by PR import and feedback workflows)
-github_api_demo_b = git.github_api(
-    url = "https://github.com/daquinteroflex/copybara-demo-B",
-    # Optional: Add API checker for validation
-    # checker = some_checker,
-)
-
-# ============================================================================
-# Workflow 3: Import PRs from demo-B (EVENT-DRIVEN)
-# ============================================================================
-# This workflow monitors PRs in demo-B and imports them to demo-A
-# when specific criteria are met (labels, approvals, status checks)
-
+# Workflow 3: Import PRs from demo-B
+# Automatically imports approved PRs from demo-B to demo-A
+# This allows external contributors to submit PRs to demo-B,
+# which then get imported to demo-A's public/test_repo/ directory
 core.workflow(
     name = "import_pr_from_b",
     # Use github_pr_origin to monitor and import PRs
@@ -102,11 +104,9 @@ core.workflow(
         required_labels = ["copybara:import"],
 
         # Optional: Require specific status checks to pass
-        # Uncomment and modify as needed:
         # required_status_context_names = ["CI/test", "CI/build"],
 
         # Optional: Require specific check runs to succeed
-        # Uncomment and modify as needed:
         # required_check_runs = ["unit-tests", "linter"],
 
         # Require PR to be approved before import
@@ -115,7 +115,7 @@ core.workflow(
         # Who can approve: COLLABORATOR, MEMBER, or OWNER
         review_approvers = ["COLLABORATOR", "MEMBER", "OWNER"],
 
-        # Use the PR head (not merge commit)
+        # Use the PR branch (not merge commit)
         use_merge = False,
 
         # For CHANGE_REQUEST workflows, find baseline from branch
@@ -124,7 +124,10 @@ core.workflow(
         # Only look at first parent (ignore merge commits in PR)
         first_parent = True,
 
-        # Optional: Only import PRs targeting specific branch
+        # API checker for validating GitHub operations
+        api_checker = None,
+
+        # Optional: Only import PRs for specific branch
         # branch = "main",
     ),
 
@@ -153,45 +156,88 @@ core.workflow(
     # Use CHANGE_REQUEST mode for PR imports
     mode = "CHANGE_REQUEST",
 
-    # Set revision ID for tracking
+    # Optional: Set PR destination reference
     set_rev_id = True,
 )
 
 # ============================================================================
-# Workflow 4: Automated PR Feedback (TRIGGER-BASED)
+# NEW: FEEDBACK WORKFLOW (EVENT-DRIVEN)
 # ============================================================================
-# This workflow responds to GitHub events and provides automated feedback
-# on PRs in demo-B (comments, labels, status checks)
 
+# Workflow 4: Automated feedback on demo-B PRs
+# Responds to GitHub events and provides automated feedback
+# This can post comments, add labels, or update status checks
 core.feedback(
     name = "pr_feedback",
 
-    # GitHub trigger configuration - monitors demo-B for PR events
+    # GitHub trigger configuration
+    # Monitors demo-B for PR events
     trigger = git.github_trigger(
         url = "https://github.com/daquinteroflex/copybara-demo-B",
 
         # Subscribe to specific GitHub events
         events = [
-            "PULL_REQUEST",                # PR opened, closed, updated
+            "PULL_REQUEST",              # PR opened, closed, etc.
             "PULL_REQUEST_REVIEW_COMMENT", # Comments on PR
-            "STATUS",                      # Status checks updated
-            "CHECK_RUNS",                  # Check runs completed
+            "STATUS",                    # Status checks updated
+            "CHECK_RUNS",                # Check runs completed
         ],
 
         # Optional: API checker for validation
-        # checker = some_checker,
+        checker = None,
     ),
 
     # Origin endpoint (where feedback comes from)
-    origin = github_api_demo_b,
+    origin = github_api,
 
     # Destination endpoint (where to post feedback)
-    destination = github_api_demo_b,
+    destination = github_api,
 
     # Actions to perform when triggered
     actions = [
-        # This is a placeholder - actual implementation would use ctx object
-        # See examples below for full implementation
+        # Action 1: Add label when PR is ready for import
+        core.action(
+            name = "label_ready_for_import",
+            action = """
+                # Get PR information
+                pr = ctx.origin.get_pull_requests(
+                    head_branch = ctx.ref,
+                    state = 'OPEN'
+                )[0]
+
+                # Check if PR has required approvals
+                if pr.review_state == 'APPROVED':
+                    # Add import label
+                    ctx.destination.add_label(
+                        number = pr.number,
+                        labels = ['copybara:import']
+                    )
+
+                    # Post comment
+                    ctx.destination.post_issue_comment(
+                        number = pr.number,
+                        comment = '✅ PR approved! Adding import label. This will be synced to copybara-demo-A.'
+                    )
+            """,
+        ),
+
+        # Action 2: Create status check
+        core.action(
+            name = "update_copybara_status",
+            action = """
+                # Get commit SHA
+                commit = ctx.ref
+
+                # Create status check
+                ctx.destination.create_status(
+                    sha = commit,
+                    state = 'success',
+                    context = 'copybara/import-check',
+                    description = 'Ready for Copybara import',
+                    # target_url = 'https://your-ci-dashboard.com/copybara'
+                )
+            """,
+        ),
     ],
 )
 
@@ -199,69 +245,37 @@ core.feedback(
 # USAGE INSTRUCTIONS
 # ============================================================================
 
-# 1. IMPORT A SPECIFIC PR FROM DEMO-B:
+# To use these new workflows:
+#
+# 1. IMPORT PRS FROM DEMO-B:
 #    copybara copy.bara.sky import_pr_from_b --github-pr-number=<PR_NUMBER>
 #
 #    Example:
 #    copybara copy.bara.sky import_pr_from_b --github-pr-number=5
 #
-#    Requirements for import:
-#    - PR must have "copybara:import" label
-#    - PR must be approved by COLLABORATOR/MEMBER/OWNER
-#    - PR must be in OPEN state
-#    - Optional status checks must pass (if configured)
-
+#    This will import PR #5 from demo-B if it meets the criteria:
+#    - Has "copybara:import" label
+#    - Is approved by a COLLABORATOR/MEMBER/OWNER
+#    - Status checks pass (if configured)
+#
 # 2. RUN FEEDBACK WORKFLOW:
 #    copybara copy.bara.sky pr_feedback
 #
-#    This workflow monitors GitHub events and can:
-#    - Add labels to PRs when they meet criteria
-#    - Post comments on PRs
-#    - Update status checks
-#    - Trigger other automations
-
-# 3. CHECK FOR READY PRS (BATCH MODE):
-#    copybara copy.bara.sky import_pr_from_b
+#    This workflow monitors GitHub events and:
+#    - Adds "copybara:import" label to approved PRs
+#    - Posts comments on PRs
+#    - Updates status checks
 #
-#    Without --github-pr-number, this checks all open PRs
-#    and imports any that meet the criteria
-
-# 4. DRY RUN (PREVIEW):
-#    copybara copy.bara.sky import_pr_from_b --github-pr-number=5 --dry-run
+# 3. CONTINUOUS MONITORING (Service Mode):
+#    To run Copybara as a service that continuously monitors PRs,
+#    you would need to:
 #
-#    Preview what would be imported without making changes
-
-# 5. COMMAND LINE FLAGS:
-#    --github-required-label=<LABEL>
-#        Override required labels for PR import
+#    a) Set up a webhook receiver service
+#    b) Configure GitHub webhooks to call your service
+#    c) Have the service trigger Copybara workflows
 #
-#    --github-required-status-context-name=<NAME>
-#        Add required status check names
+#    Example webhook setup (not built into Copybara):
+#    - GitHub → Webhook → Your Service → Triggers Copybara
 #
-#    --github-required-check-run=<NAME>
-#        Add required check run names
-
-# ============================================================================
-# AUTOMATION SETUP
-# ============================================================================
-
-# To run these workflows automatically, you can:
-#
-# A. GITHUB ACTIONS (Recommended)
-#    - Set up a workflow in demo-A's .github/workflows/
-#    - Trigger on schedule or webhook
-#    - Run copybara commands via GitHub Actions
-#
-# B. CRON JOB
-#    - Set up a cron job on a server
-#    - Run: copybara copy.bara.sky import_pr_from_b
-#    - Schedule: */15 * * * * (every 15 minutes)
-#
-# C. WEBHOOK SERVICE
-#    - Create a service that listens to GitHub webhooks
-#    - When PR events occur, trigger copybara
-#    - Requires custom service implementation
-#
-# D. CI/CD INTEGRATION
-#    - Integrate with Jenkins, CircleCI, etc.
-#    - Trigger copybara runs on events
+# 4. GITHUB ACTIONS INTEGRATION:
+#    See the companion workflow file for automation setup
