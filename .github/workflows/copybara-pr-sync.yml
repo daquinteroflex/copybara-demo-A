@@ -110,7 +110,9 @@ jobs:
           echo "=== Running copybara for PR #${PR_NUMBER} ==="
 
           # Build copybara command
-          COPYBARA_CMD="copybara \
+          COPYBARA_CMD="copybara migrate \
+            ${GITHUB_WORKSPACE}/copy.bara.sky \
+            import_pr_from_b \
             --git-destination-url=\"https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-A.git\" \
             --github-destination-pr-branch=\"copybara/import-pr-${PR_NUMBER}-$(date +%Y%m%d-%H%M%S)\" \
             --github-pr-number=${PR_NUMBER} \
@@ -120,11 +122,6 @@ jobs:
           if [ "${DRY_RUN}" = "true" ]; then
             COPYBARA_CMD="${COPYBARA_CMD} --dry-run"
           fi
-
-          # Add workflow name and config file
-          COPYBARA_CMD="${COPYBARA_CMD} \
-            ${GITHUB_WORKSPACE}/copy.bara.sky \
-            import_pr_from_b"
 
           echo "=== Executing command ==="
           echo "${COPYBARA_CMD}"
@@ -173,7 +170,9 @@ jobs:
             echo "=== Processing PR #${PR_NUM} ==="
 
             # Build copybara command for this PR
-            COPYBARA_CMD="copybara \
+            COPYBARA_CMD="copybara migrate \
+              ${GITHUB_WORKSPACE}/copy.bara.sky \
+              import_pr_from_b \
               --git-destination-url=\"https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-A.git\" \
               --github-destination-pr-branch=\"copybara/import-pr-${PR_NUM}-$(date +%Y%m%d-%H%M%S)\" \
               --github-pr-number=${PR_NUM} \
@@ -183,11 +182,6 @@ jobs:
             if [ "${DRY_RUN}" = "true" ]; then
               COPYBARA_CMD="${COPYBARA_CMD} --dry-run"
             fi
-
-            # Add workflow name and config file
-            COPYBARA_CMD="${COPYBARA_CMD} \
-              ${GITHUB_WORKSPACE}/copy.bara.sky \
-              import_pr_from_b"
 
             echo "Executing: ${COPYBARA_CMD}"
 
