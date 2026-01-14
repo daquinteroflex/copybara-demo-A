@@ -1,0 +1,204 @@
+name: Copybara PR Import from demo-B
+
+on:
+  # Run on schedule to check for new PRs
+  schedule:
+    - cron: '*/30 * * * *'  # Every 30 minutes
+
+  # Manual trigger with optional PR number
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Specific PR number to import from demo-B (leave empty to import all ready PRs)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run (preview only, no changes)'
+        required: false
+        type: boolean
+        default: false
+
+  # Trigger on push to specific branch (for testing)
+  push:
+    branches:
+      - copybara-pr-sync-test
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  import-prs:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/anipos/copybara-docker-image
+
+    steps:
+      - name: Checkout demo-A repo
+        uses: actions/checkout@v4
+        with:
+          repository: daquinteroflex/copybara-demo-A
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          sparse-checkout: |
+            copy.bara.sky
+            public/test_repo
+            .gitignore
+            .gitattributes
+          sparse-checkout-cone-mode: false
+
+      - name: Verify checkout
+        run: |
+          echo "=== Workspace contents ==="
+          ls -la
+          echo "=== copy.bara.sky exists ==="
+          ls -la copy.bara.sky || echo "ERROR: copy.bara.sky not found"
+          echo "=== public/test_repo contents ==="
+          ls -la public/test_repo/ || echo "Directory not found"
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "Copybara Bot"
+          git config --global user.email "copybara@example.com"
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
+      - name: Run Copybara PR Import (Specific PR)
+        if: inputs.pr_number != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          echo "=== Current working directory ==="
+          pwd
+          echo "=== Environment ==="
+          echo "GITHUB_WORKSPACE=${GITHUB_WORKSPACE}"
+          echo "PR_NUMBER=${PR_NUMBER}"
+          echo "DRY_RUN=${DRY_RUN}"
+
+          echo "=== Verifying config file ==="
+          cat "${GITHUB_WORKSPACE}/copy.bara.sky" | head -20
+
+          echo "=== Running copybara for PR #${PR_NUMBER} ==="
+
+          # Build copybara command
+          COPYBARA_CMD="copybara \
+            --git-destination-url=\"https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-A.git\" \
+            --github-destination-pr-branch=\"copybara/import-pr-${PR_NUMBER}-$(date +%Y%m%d-%H%M%S)\" \
+            --github-pr-number=${PR_NUMBER} \
+            --verbose"
+
+          # Add dry-run flag if requested
+          if [ "${DRY_RUN}" = "true" ]; then
+            COPYBARA_CMD="${COPYBARA_CMD} --dry-run"
+          fi
+
+          # Add workflow name and config file
+          COPYBARA_CMD="${COPYBARA_CMD} \
+            ${GITHUB_WORKSPACE}/copy.bara.sky \
+            import_pr_from_b"
+
+          echo "=== Executing command ==="
+          echo "${COPYBARA_CMD}"
+          eval "${COPYBARA_CMD}"
+
+      - name: Run Copybara PR Import (All Ready PRs)
+        if: inputs.pr_number == ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          echo "=== Current working directory ==="
+          pwd
+          echo "=== Checking for all ready PRs from demo-B ==="
+
+          echo "=== Running copybara for all open PRs ==="
+
+          # Build copybara command for batch mode
+          COPYBARA_CMD="copybara \
+            --git-destination-url=\"https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-A.git\" \
+            --github-destination-pr-branch=\"copybara/import-prs-$(date +%Y%m%d-%H%M%S)\" \
+            --verbose"
+
+          # Add dry-run flag if requested
+          if [ "${DRY_RUN}" = "true" ]; then
+            COPYBARA_CMD="${COPYBARA_CMD} --dry-run"
+          fi
+
+          # Add workflow name and config file
+          COPYBARA_CMD="${COPYBARA_CMD} \
+            ${GITHUB_WORKSPACE}/copy.bara.sky \
+            import_pr_from_b"
+
+          echo "=== Executing command ==="
+          echo "${COPYBARA_CMD}"
+          eval "${COPYBARA_CMD}"
+
+      - name: Check for created PR
+        if: inputs.dry_run != true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "=== Checking for newly created PRs ==="
+          # List recent PRs
+          gh pr list \
+            --repo daquinteroflex/copybara-demo-A \
+            --limit 5 \
+            --state open \
+            --search "copybara/import" \
+            --json number,title,headRefName,createdAt
+
+      - name: Output Summary
+        if: always()
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          echo "### Copybara PR Import Summary 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "**Mode:** 🔍 DRY RUN (preview only)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Mode:** ✅ LIVE RUN" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -n "${PR_NUMBER}" ]; then
+            echo "- **Source:** copybara-demo-B PR #${PR_NUMBER}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Action:** Import specific PR" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Source:** copybara-demo-B (all open PRs)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Action:** Batch import of all ready PRs" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "- **Destination:** copybara-demo-A/public/test_repo/" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${DRY_RUN}" != "true" ]; then
+            echo "#### What to check:" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ PR created in copybara-demo-A" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Changes are in public/test_repo/ directory" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ No private/ files leaked" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Original PR metadata preserved" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Tests pass" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "[View PRs in demo-A →](https://github.com/daquinteroflex/copybara-demo-A/pulls)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "This was a dry run. No changes were made." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "### ❌ Copybara PR Import Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The import process failed. Check the logs above for details." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Common issues:" >> $GITHUB_STEP_SUMMARY
+          echo "- PR may not exist in demo-B" >> $GITHUB_STEP_SUMMARY
+          echo "- PR may be closed (only OPEN PRs are imported)" >> $GITHUB_STEP_SUMMARY
+          echo "- Authentication issues with GitHub token" >> $GITHUB_STEP_SUMMARY
+          echo "- Merge conflicts in destination repo" >> $GITHUB_STEP_SUMMARY
+          echo "- Configuration syntax errors in copy.bara.sky" >> $GITHUB_STEP_SUMMARY

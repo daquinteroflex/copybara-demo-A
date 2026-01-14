@@ -16,11 +16,11 @@
 core.workflow(
     name = "public_to_mirror",
     origin = git.origin(
-        url = "https://github.com/daquinteroflex/copybara-demo-A.git",
+        url = "git@github.com:daquinteroflex/copybara-demo-A.git",
         ref = "main",
     ),
     destination = git.destination(
-        url = "https://github.com/daquinteroflex/copybara-demo-B.git",
+        url = "git@github.com:daquinteroflex/copybara-demo-B.git",
         fetch = "main",
         push = "main",
     ),
@@ -45,11 +45,11 @@ core.workflow(
 core.workflow(
     name = "mirror_to_public",
     origin = git.origin(
-        url = "https://github.com/daquinteroflex/copybara-demo-B.git",
+        url = "git@github.com:daquinteroflex/copybara-demo-B.git",
         ref = "main",
     ),
     destination = git.destination(
-        url = "https://github.com/daquinteroflex/copybara-demo-A.git",
+        url = "git@github.com:daquinteroflex/copybara-demo-A.git",
         fetch = "main",
         push = "main",
     ),
@@ -92,7 +92,7 @@ core.workflow(
     name = "import_pr_from_b",
     # Use github_pr_origin to monitor and import PRs
     origin = git.github_pr_origin(
-        url = "https://github.com/daquinteroflex/copybara-demo-B.git",
+        url = "git@github.com:daquinteroflex/copybara-demo-B.git",
 
         # PR must be in OPEN state to be imported
         state = "OPEN",
@@ -122,7 +122,7 @@ core.workflow(
     ),
 
     destination = git.destination(
-        url = "https://github.com/daquinteroflex/copybara-demo-A.git",
+        url = "git@github.com:daquinteroflex/copybara-demo-A.git",
         fetch = "main",
         push = "main",
     ),
