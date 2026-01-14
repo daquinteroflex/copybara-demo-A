@@ -57,10 +57,16 @@ jobs:
           ls -la public/test_repo/ || echo "Directory not found"
 
       - name: Configure Git
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
         run: |
           git config --global user.name "Copybara Bot"
           git config --global user.email "copybara@example.com"
           git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
+          # Configure git to use token for HTTPS
+          git config --global credential.helper store
+          echo "https://x-access-token:${GITHUB_TOKEN}@github.com" > ~/.git-credentials
 
       - name: Install GitHub CLI
         run: |
