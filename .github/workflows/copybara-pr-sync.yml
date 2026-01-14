@@ -76,6 +76,14 @@ jobs:
           echo "PR_NUMBER=${PR_NUMBER}"
           echo "DRY_RUN=${DRY_RUN}"
 
+          # Validate PR number
+          if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "❌ Invalid PR number: ${PR_NUMBER}"
+            echo "### ❌ Invalid Input" >> $GITHUB_STEP_SUMMARY
+            echo "PR number must be a positive integer, got: ${PR_NUMBER}" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
           echo "=== Verifying config file ==="
           cat "${GITHUB_WORKSPACE}/copy.bara.sky" | head -20
 
@@ -112,30 +120,88 @@ jobs:
           pwd
           echo "=== Checking for all ready PRs from demo-B ==="
 
-          echo "=== Running copybara for all open PRs ==="
-
-          # Build copybara command for batch mode
-          COPYBARA_CMD="copybara \
-            --git-destination-url=\"https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-A.git\" \
-            --github-destination-pr-branch=\"copybara/import-prs-$(date +%Y%m%d-%H%M%S)\" \
-            --verbose"
-
-          # Add dry-run flag if requested
-          if [ "${DRY_RUN}" = "true" ]; then
-            COPYBARA_CMD="${COPYBARA_CMD} --dry-run"
+          # Get list of open PRs from demo-B
+          echo "=== Fetching open PRs from demo-B ==="
+          if ! PR_LIST=$(gh pr list \
+            --repo daquinteroflex/copybara-demo-B \
+            --state open \
+            --json number \
+            --jq '.[].number' 2>&1); then
+            echo "❌ Failed to fetch PRs from demo-B"
+            echo "Error: $PR_LIST"
+            echo "### ❌ Failed to Fetch PRs" >> $GITHUB_STEP_SUMMARY
+            echo "Could not retrieve open PRs from copybara-demo-B. Check authentication and repository access." >> $GITHUB_STEP_SUMMARY
+            exit 1
           fi
 
-          # Add workflow name and config file
-          COPYBARA_CMD="${COPYBARA_CMD} \
-            ${GITHUB_WORKSPACE}/copy.bara.sky \
-            import_pr_from_b"
+          if [ -z "$PR_LIST" ]; then
+            echo "No open PRs found in demo-B"
+            echo "### ℹ️ No PRs to Import" >> $GITHUB_STEP_SUMMARY
+            echo "No open PRs found in copybara-demo-B at this time." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
 
-          echo "=== Executing command ==="
-          echo "${COPYBARA_CMD}"
-          eval "${COPYBARA_CMD}"
+          echo "Found PRs: $PR_LIST"
+
+          # Import each PR
+          SUCCESS_COUNT=0
+          FAIL_COUNT=0
+          SKIPPED_COUNT=0
+
+          for PR_NUM in $PR_LIST; do
+            echo ""
+            echo "=== Processing PR #${PR_NUM} ==="
+
+            # Build copybara command for this PR
+            COPYBARA_CMD="copybara \
+              --git-destination-url=\"https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-A.git\" \
+              --github-destination-pr-branch=\"copybara/import-pr-${PR_NUM}-$(date +%Y%m%d-%H%M%S)\" \
+              --github-pr-number=${PR_NUM} \
+              --verbose"
+
+            # Add dry-run flag if requested
+            if [ "${DRY_RUN}" = "true" ]; then
+              COPYBARA_CMD="${COPYBARA_CMD} --dry-run"
+            fi
+
+            # Add workflow name and config file
+            COPYBARA_CMD="${COPYBARA_CMD} \
+              ${GITHUB_WORKSPACE}/copy.bara.sky \
+              import_pr_from_b"
+
+            echo "Executing: ${COPYBARA_CMD}"
+
+            # Run copybara for this PR and capture exit code
+            eval "${COPYBARA_CMD}"
+            EXIT_CODE=$?
+
+            # Check result based on exit code
+            if [ $EXIT_CODE -eq 0 ]; then
+              echo "✅ Successfully imported PR #${PR_NUM}"
+              ((SUCCESS_COUNT++))
+            elif [ $EXIT_CODE -eq 4 ]; then
+              echo "⏭️  PR #${PR_NUM} skipped (no changes or already imported)"
+              ((SKIPPED_COUNT++))
+            else
+              echo "❌ Failed to import PR #${PR_NUM} (exit code: ${EXIT_CODE})"
+              ((FAIL_COUNT++))
+            fi
+          done
+
+          echo ""
+          echo "=== Import Summary ==="
+          echo "✅ Success: ${SUCCESS_COUNT}"
+          echo "⏭️  Skipped: ${SKIPPED_COUNT}"
+          echo "❌ Failed: ${FAIL_COUNT}"
+
+          # Set outputs for later steps
+          echo "SUCCESS_COUNT=${SUCCESS_COUNT}" >> $GITHUB_ENV
+          echo "SKIPPED_COUNT=${SKIPPED_COUNT}" >> $GITHUB_ENV
+          echo "FAIL_COUNT=${FAIL_COUNT}" >> $GITHUB_ENV
+          echo "BATCH_MODE=true" >> $GITHUB_ENV
 
       - name: Check for created PR
-        if: inputs.dry_run != true
+        if: inputs.dry_run != true && success()
         env:
           GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
         run: |
@@ -153,6 +219,10 @@ jobs:
         env:
           PR_NUMBER: ${{ inputs.pr_number }}
           DRY_RUN: ${{ inputs.dry_run }}
+          BATCH_MODE: ${{ env.BATCH_MODE }}
+          SUCCESS_COUNT: ${{ env.SUCCESS_COUNT }}
+          SKIPPED_COUNT: ${{ env.SKIPPED_COUNT }}
+          FAIL_COUNT: ${{ env.FAIL_COUNT }}
         run: |
           echo "### Copybara PR Import Summary 🚀" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -171,8 +241,18 @@ jobs:
           else
             echo "- **Source:** copybara-demo-B (all open PRs)" >> $GITHUB_STEP_SUMMARY
             echo "- **Action:** Batch import of all ready PRs" >> $GITHUB_STEP_SUMMARY
+
+            # Show batch results if available
+            if [ "${BATCH_MODE}" = "true" ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "#### Batch Import Results 📊" >> $GITHUB_STEP_SUMMARY
+              echo "- ✅ Imported: ${SUCCESS_COUNT:-0}" >> $GITHUB_STEP_SUMMARY
+              echo "- ⏭️  Skipped: ${SKIPPED_COUNT:-0}" >> $GITHUB_STEP_SUMMARY
+              echo "- ❌ Failed: ${FAIL_COUNT:-0}" >> $GITHUB_STEP_SUMMARY
+            fi
           fi
 
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Destination:** copybara-demo-A/public/test_repo/" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
