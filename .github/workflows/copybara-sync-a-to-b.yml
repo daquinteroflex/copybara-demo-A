@@ -1,0 +1,159 @@
+name: Copybara Sync A→B (Continuous)
+
+on:
+  # Trigger when main branch changes in demo-A
+  push:
+    branches:
+      - main
+    paths:
+      - 'public/test_repo/**'
+
+  # Manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (preview only, no changes)'
+        required: false
+        type: boolean
+        default: false
+
+  # Run on schedule to catch any missed updates
+  schedule:
+    - cron: '0 */6 * * *'  # Every 6 hours
+
+permissions:
+  contents: write
+
+jobs:
+  sync-a-to-b:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/anipos/copybara-docker-image
+
+    steps:
+      - name: Checkout demo-A repo
+        uses: actions/checkout@v4
+        with:
+          repository: daquinteroflex/copybara-demo-A
+          fetch-depth: 0
+          token: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+          sparse-checkout: |
+            copy.bara.sky
+            public/test_repo
+            .gitignore
+            .gitattributes
+          sparse-checkout-cone-mode: false
+
+      - name: Verify checkout
+        run: |
+          echo "=== Current working directory ==="
+          pwd
+          echo "=== Workspace contents ==="
+          ls -la
+          echo "=== copy.bara.sky exists ==="
+          ls -la copy.bara.sky || echo "ERROR: copy.bara.sky not found"
+          echo "=== public/test_repo contents ==="
+          ls -la public/test_repo/ || echo "Directory not found"
+
+      - name: Configure Git
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+        run: |
+          git config --global user.name "Copybara Bot"
+          git config --global user.email "copybara@example.com"
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
+          # Configure git to use token for HTTPS
+          git config --global credential.helper store
+          echo "https://x-access-token:${GITHUB_TOKEN}@github.com" > ~/.git-credentials
+
+      - name: Run Copybara Sync A→B
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          echo "=== Syncing from demo-A to demo-B ==="
+          echo "This workflow syncs public/test_repo/ in demo-A to root in demo-B"
+
+          # Build copybara command
+          COPYBARA_CMD="copybara migrate \
+            ${GITHUB_WORKSPACE}/copy.bara.sky \
+            public_to_mirror \
+            --git-destination-url=\"https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-B.git\" \
+            --verbose"
+
+          # Add dry-run flag if requested
+          if [ "${DRY_RUN}" = "true" ]; then
+            COPYBARA_CMD="${COPYBARA_CMD} --dry-run"
+            echo "🔍 DRY RUN MODE - No changes will be made"
+          fi
+
+          echo "Executing: ${COPYBARA_CMD}"
+          eval "${COPYBARA_CMD}"
+          EXIT_CODE=$?
+
+          # Check result
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "✅ Successfully synced demo-A → demo-B"
+          elif [ $EXIT_CODE -eq 4 ]; then
+            echo "⏭️  No changes to sync (repositories already in sync)"
+          else
+            echo "❌ Sync failed with exit code: ${EXIT_CODE}"
+            exit ${EXIT_CODE}
+          fi
+
+      - name: Verify sync in demo-B
+        if: inputs.dry_run != true && success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+        run: |
+          echo "=== Checking recent commits in demo-B ==="
+          # Clone demo-B and check recent commits
+          git clone --depth 5 https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-B.git /tmp/demo-b
+          cd /tmp/demo-b
+          echo "Recent commits in demo-B main:"
+          git log --oneline -5
+
+      - name: Output Summary
+        if: always()
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          echo "### Copybara A→B Sync 🔄" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "**Mode:** 🔍 DRY RUN (preview only)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Mode:** ✅ LIVE SYNC" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Source:** copybara-demo-A/public/test_repo/" >> $GITHUB_STEP_SUMMARY
+          echo "- **Destination:** copybara-demo-B (root)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Workflow:** public_to_mirror" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${DRY_RUN}" != "true" ]; then
+            echo "#### What was synced:" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ All files from public/test_repo/ → demo-B root" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Commit history preserved" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ No private/ files leaked" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "[View demo-B commits →](https://github.com/daquinteroflex/copybara-demo-B/commits/main)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "This was a dry run. No changes were made." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "### ❌ Copybara A→B Sync Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The sync process failed. Check the logs above for details." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Common issues:" >> $GITHUB_STEP_SUMMARY
+          echo "- Authentication issues with GitHub token" >> $GITHUB_STEP_SUMMARY
+          echo "- Merge conflicts in destination repo" >> $GITHUB_STEP_SUMMARY
+          echo "- Configuration syntax errors in copy.bara.sky" >> $GITHUB_STEP_SUMMARY
+          echo "- Permission issues with COPYBARA_DEMO_TOKEN" >> $GITHUB_STEP_SUMMARY

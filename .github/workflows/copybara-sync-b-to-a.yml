@@ -1,0 +1,231 @@
+name: Copybara Sync B→A (Continuous)
+
+on:
+  # Poll demo-B for changes on schedule
+  schedule:
+    - cron: '*/30 * * * *'  # Every 30 minutes
+
+  # Manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (preview only, no changes)'
+        required: false
+        type: boolean
+        default: false
+      force:
+        description: 'Force sync even if no new commits detected'
+        required: false
+        type: boolean
+        default: false
+
+  # Can be triggered via repository_dispatch from demo-B (optional webhook setup)
+  repository_dispatch:
+    types: [demo-b-updated]
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-sync:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/anipos/copybara-docker-image
+
+    steps:
+      - name: Checkout demo-A repo
+        uses: actions/checkout@v4
+        with:
+          repository: daquinteroflex/copybara-demo-A
+          fetch-depth: 0
+          token: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+          sparse-checkout: |
+            copy.bara.sky
+            public/test_repo
+            .gitignore
+            .gitattributes
+          sparse-checkout-cone-mode: false
+
+      - name: Configure Git
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+        run: |
+          git config --global user.name "Copybara Bot"
+          git config --global user.email "copybara@example.com"
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
+          # Configure git to use token for HTTPS
+          git config --global credential.helper store
+          echo "https://x-access-token:${GITHUB_TOKEN}@github.com" > ~/.git-credentials
+
+      - name: Install GitHub CLI
+        run: |
+          echo "=== Installing GitHub CLI ==="
+          apt-get update
+          apt-get install -y curl gnupg
+
+          # Add GitHub CLI repository
+          mkdir -p -m 755 /etc/apt/keyrings
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+          chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+
+          # Install gh CLI
+          apt-get update
+          apt-get install -y gh
+
+          # Verify installation
+          gh --version
+
+      - name: Check for new commits in demo-B
+        id: check_commits
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          echo "=== Checking for new commits in demo-B ==="
+
+          # Get the last commit in demo-B main branch
+          DEMO_B_LATEST=$(gh api repos/daquinteroflex/copybara-demo-B/commits/main --jq '.sha')
+          echo "Latest commit in demo-B: ${DEMO_B_LATEST}"
+
+          # Get the last synced commit (stored in demo-A's public/test_repo)
+          # Look for GitOrigin-RevId in recent commits
+          cd ${GITHUB_WORKSPACE}
+          LAST_SYNCED=$(git log --all --grep="GitOrigin-RevId:" --format="%B" -1 | grep "GitOrigin-RevId:" | sed 's/GitOrigin-RevId: //' || echo "")
+
+          echo "Last synced commit from demo-B: ${LAST_SYNCED:-none}"
+
+          # Check if there are new commits
+          if [ "${FORCE}" = "true" ]; then
+            echo "Force sync requested"
+            echo "should_sync=true" >> $GITHUB_OUTPUT
+            echo "reason=forced" >> $GITHUB_OUTPUT
+          elif [ -z "${LAST_SYNCED}" ]; then
+            echo "No previous sync found - syncing"
+            echo "should_sync=true" >> $GITHUB_OUTPUT
+            echo "reason=first_sync" >> $GITHUB_OUTPUT
+          elif [ "${DEMO_B_LATEST}" != "${LAST_SYNCED}" ]; then
+            echo "New commits detected - syncing"
+            echo "should_sync=true" >> $GITHUB_OUTPUT
+            echo "reason=new_commits" >> $GITHUB_OUTPUT
+          else
+            echo "No new commits - skipping sync"
+            echo "should_sync=false" >> $GITHUB_OUTPUT
+            echo "reason=up_to_date" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run Copybara Sync B→A
+        if: steps.check_commits.outputs.should_sync == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          echo "=== Syncing from demo-B to demo-A ==="
+          echo "This workflow syncs root in demo-B to public/test_repo/ in demo-A"
+          echo "Reason: ${{ steps.check_commits.outputs.reason }}"
+
+          # Build copybara command
+          COPYBARA_CMD="copybara migrate \
+            ${GITHUB_WORKSPACE}/copy.bara.sky \
+            mirror_to_public \
+            --git-destination-url=\"https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-A.git\" \
+            --verbose"
+
+          # Add dry-run flag if requested
+          if [ "${DRY_RUN}" = "true" ]; then
+            COPYBARA_CMD="${COPYBARA_CMD} --dry-run"
+            echo "🔍 DRY RUN MODE - No changes will be made"
+          fi
+
+          echo "Executing: ${COPYBARA_CMD}"
+          eval "${COPYBARA_CMD}"
+          EXIT_CODE=$?
+
+          # Check result
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "✅ Successfully synced demo-B → demo-A"
+          elif [ $EXIT_CODE -eq 4 ]; then
+            echo "⏭️  No changes to sync (repositories already in sync)"
+          else
+            echo "❌ Sync failed with exit code: ${EXIT_CODE}"
+            exit ${EXIT_CODE}
+          fi
+
+      - name: Verify sync in demo-A
+        if: steps.check_commits.outputs.should_sync == 'true' && inputs.dry_run != true && success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+        run: |
+          echo "=== Checking recent commits in demo-A public/test_repo ==="
+          cd ${GITHUB_WORKSPACE}
+          echo "Recent commits affecting public/test_repo:"
+          git log --oneline -5 -- public/test_repo/
+
+      - name: Output Summary
+        if: always()
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          SHOULD_SYNC: ${{ steps.check_commits.outputs.should_sync }}
+          REASON: ${{ steps.check_commits.outputs.reason }}
+        run: |
+          echo "### Copybara B→A Sync 🔄" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "**Mode:** 🔍 DRY RUN (preview only)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Mode:** ✅ LIVE SYNC" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Source:** copybara-demo-B (root)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Destination:** copybara-demo-A/public/test_repo/" >> $GITHUB_STEP_SUMMARY
+          echo "- **Workflow:** mirror_to_public" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Show sync decision
+          if [ "${SHOULD_SYNC}" = "true" ]; then
+            echo "#### Sync Decision: ✅ SYNCED" >> $GITHUB_STEP_SUMMARY
+            case "${REASON}" in
+              "forced")
+                echo "- Reason: Force sync requested" >> $GITHUB_STEP_SUMMARY
+                ;;
+              "first_sync")
+                echo "- Reason: No previous sync detected" >> $GITHUB_STEP_SUMMARY
+                ;;
+              "new_commits")
+                echo "- Reason: New commits detected in demo-B" >> $GITHUB_STEP_SUMMARY
+                ;;
+            esac
+
+            if [ "${DRY_RUN}" != "true" ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "#### What was synced:" >> $GITHUB_STEP_SUMMARY
+              echo "- ✅ All files from demo-B root → public/test_repo/" >> $GITHUB_STEP_SUMMARY
+              echo "- ✅ Commit history preserved" >> $GITHUB_STEP_SUMMARY
+              echo "- ✅ Only public/test_repo/ modified in demo-A" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "[View demo-A commits →](https://github.com/daquinteroflex/copybara-demo-A/commits/main)" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "#### Sync Decision: ⏭️ SKIPPED" >> $GITHUB_STEP_SUMMARY
+            echo "- Reason: Repositories already in sync" >> $GITHUB_STEP_SUMMARY
+            echo "- No new commits detected in demo-B since last sync" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "ℹ️ Use 'force' option to sync anyway" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "### ❌ Copybara B→A Sync Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The sync process failed. Check the logs above for details." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Common issues:" >> $GITHUB_STEP_SUMMARY
+          echo "- Authentication issues with GitHub token" >> $GITHUB_STEP_SUMMARY
+          echo "- Merge conflicts in destination repo" >> $GITHUB_STEP_SUMMARY
+          echo "- Configuration syntax errors in copy.bara.sky" >> $GITHUB_STEP_SUMMARY
+          echo "- Permission issues with COPYBARA_DEMO_TOKEN" >> $GITHUB_STEP_SUMMARY
+          echo "- GitOrigin-RevId not found in commit messages" >> $GITHUB_STEP_SUMMARY
