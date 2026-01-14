@@ -113,9 +113,9 @@ jobs:
           COPYBARA_CMD="copybara migrate \
             ${GITHUB_WORKSPACE}/copy.bara.sky \
             import_pr_from_b \
+            ${PR_NUMBER} \
             --git-destination-url=\"https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-A.git\" \
             --github-destination-pr-branch=\"copybara/import-pr-${PR_NUMBER}-$(date +%Y%m%d-%H%M%S)\" \
-            --github-pr-number=${PR_NUMBER} \
             --verbose"
 
           # Add dry-run flag if requested
@@ -173,9 +173,9 @@ jobs:
             COPYBARA_CMD="copybara migrate \
               ${GITHUB_WORKSPACE}/copy.bara.sky \
               import_pr_from_b \
+              ${PR_NUM} \
               --git-destination-url=\"https://x-access-token:${GITHUB_TOKEN}@github.com/daquinteroflex/copybara-demo-A.git\" \
               --github-destination-pr-branch=\"copybara/import-pr-${PR_NUM}-$(date +%Y%m%d-%H%M%S)\" \
-              --github-pr-number=${PR_NUM} \
               --verbose"
 
             # Add dry-run flag if requested
