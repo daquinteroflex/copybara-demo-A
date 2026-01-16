@@ -42,30 +42,15 @@ jobs:
           owner: daquinteroflex
 
   sync-a-to-b:
-    needs: generate-token
+    # NOTE: Testing token generation inside container - removed needs dependency
+    # needs: generate-token
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/anipos/copybara-docker-image
-    env:
-      GH_TOKEN: ${{ needs.generate-token.outputs.token }}
 
     steps:
-      - name: Verify Token from Job Output
-        run: |
-          echo "=== Token Verification (from job output) ==="
-          if [ -z "${{ needs.generate-token.outputs.token }}" ]; then
-            echo "❌ ERROR: Token is empty or not set"
-            echo "Token from generate-token job is not available"
-            exit 1
-          fi
-          TOKEN_LENGTH=${#TOKEN}
-          echo "✅ Token received successfully"
-          echo "Token length: ${TOKEN_LENGTH} characters"
-        env:
-          TOKEN: ${{ needs.generate-token.outputs.token }}
-
-      - name: Test Generate Token Inside Container
-        id: container-token
+      - name: Generate Token Inside Container
+        id: app-token
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.COPYBARA_APP_ID }}
@@ -73,25 +58,25 @@ jobs:
           repositories: copybara-demo-A,copybara-demo-B
           owner: daquinteroflex
 
-      - name: Verify Container Token
+      - name: Verify Token
         run: |
-          echo "=== Token Verification (generated in container) ==="
-          if [ -z "${{ steps.container-token.outputs.token }}" ]; then
-            echo "❌ ERROR: Container token generation failed"
+          echo "=== Token Verification ==="
+          if [ -z "${{ steps.app-token.outputs.token }}" ]; then
+            echo "❌ ERROR: Token generation inside container failed"
             exit 1
           fi
           TOKEN_LENGTH=${#TOKEN}
-          echo "✅ Container token generated successfully"
+          echo "✅ Token generated successfully inside container"
           echo "Token length: ${TOKEN_LENGTH} characters"
         env:
-          TOKEN: ${{ steps.container-token.outputs.token }}
+          TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Checkout demo-A repo
         uses: actions/checkout@v4
         with:
           repository: daquinteroflex/copybara-demo-A
           fetch-depth: 0
-          token: ${{ needs.generate-token.outputs.token }}
+          token: ${{ steps.app-token.outputs.token }}
           sparse-checkout: |
             copy.bara.sky
             public/test_repo
@@ -112,7 +97,7 @@ jobs:
 
       - name: Configure Git
         env:
-          GITHUB_TOKEN: ${{ needs.generate-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           git config --global user.name "Copybara Bot"
           git config --global user.email "copybara@example.com"
@@ -124,7 +109,7 @@ jobs:
 
       - name: Run Copybara Sync A→B
         env:
-          GITHUB_TOKEN: ${{ needs.generate-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           echo "=== Syncing from demo-A to demo-B ==="
@@ -160,7 +145,7 @@ jobs:
       - name: Verify sync in demo-B
         if: inputs.dry_run != true && success()
         env:
-          GITHUB_TOKEN: ${{ needs.generate-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           echo "=== Checking recent commits in demo-B ==="
           # Clone demo-B and check recent commits
