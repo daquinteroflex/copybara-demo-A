@@ -40,7 +40,17 @@ Add these values to your repository under **Settings > Secrets and variables > A
 
 ## 3. Workflow Implementation
 
-Copy and paste this into your `.github/workflows/` file.
+### Which Pattern Should I Use?
+
+- **Option A (Single Job)**: Use when running on standard GitHub-hosted runners
+- **Option B (Two Jobs)**: Use when you need to run commands inside a Docker container (e.g., Copybara container)
+
+**Why two jobs for containers?**
+The `actions/create-github-app-token@v2` action doesn't work properly inside custom Docker containers. By generating the token in a separate job and passing it as an output, we can use the token inside the container job.
+
+### Option A: Single Job (Standard Runner)
+
+Use this pattern when running on standard GitHub runners without custom containers:
 
 ```yaml
 jobs:
@@ -53,10 +63,64 @@ jobs:
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.COPYBARA_APP_ID }}
-          private-key: ${{ secrets.COPYBARA_APP_PRIVATE_KEY }}
+          private-key: ${{ secrets.COPYBARA_PRIVATE_KEY }}
 
       # Use the generated token for downstream steps
-      - name: Run Staging Tests
-        uses: ./actions/staging-tests
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           token: ${{ steps.app-token.outputs.token }}
+
+      - name: Run commands
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          # Your commands here
+```
+
+### Option B: Two Jobs (With Container)
+
+Use this pattern when you need to run steps inside a Docker container. The `actions/create-github-app-token` action doesn't work inside custom containers, so we generate the token in a separate job first:
+
+```yaml
+jobs:
+  generate-token:
+    runs-on: ubuntu-latest
+    outputs:
+      token: ${{ steps.app-token.outputs.token }}
+    steps:
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.COPYBARA_APP_ID }}
+          private-key: ${{ secrets.COPYBARA_PRIVATE_KEY }}
+          repositories: copybara-demo-A,copybara-demo-B
+
+  copybara-job:
+    needs: generate-token
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/anipos/copybara-docker-image
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ needs.generate-token.outputs.token }}
+
+      - name: Configure Git
+        env:
+          GITHUB_TOKEN: ${{ needs.generate-token.outputs.token }}
+        run: |
+          git config --global user.name "Copybara Bot"
+          git config --global user.email "copybara@example.com"
+          git config --global credential.helper store
+          echo "https://x-access-token:${GITHUB_TOKEN}@github.com" > ~/.git-credentials
+
+      - name: Run Copybara
+        env:
+          GITHUB_TOKEN: ${{ needs.generate-token.outputs.token }}
+        run: |
+          copybara migrate copy.bara.sky workflow_name \
+            --git-destination-url="https://x-access-token:${GITHUB_TOKEN}@github.com/org/repo.git"

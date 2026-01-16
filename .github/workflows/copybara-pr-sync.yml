@@ -2,8 +2,8 @@ name: Copybara PR Import from demo-B
 
 on:
   # Run on schedule to check for new PRs
-  schedule:
-    - cron: '*/30 * * * *'  # Every 30 minutes
+  # schedule:
+  #   - cron: '*/30 * * * *'  # Every 30 minutes
 
   # Manual trigger with optional PR number
   workflow_dispatch:
@@ -46,6 +46,8 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/anipos/copybara-docker-image
+    env:
+      GH_TOKEN: ${{ needs.generate-token.outputs.token }}
 
     steps:
       - name: Checkout demo-A repo

@@ -36,6 +36,8 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/anipos/copybara-docker-image
+    env:
+      GH_TOKEN: ${{ needs.generate-token.outputs.token }}
 
     steps:
       - name: Checkout demo-A repo

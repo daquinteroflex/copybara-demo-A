@@ -2,8 +2,8 @@ name: Copybara Sync B→A (Continuous)
 
 on:
   # Poll demo-B for changes on schedule
-  schedule:
-    - cron: '*/30 * * * *'  # Every 30 minutes
+  # schedule:
+  #   - cron: '*/30 * * * *'  # Every 30 minutes
 
   # Manual trigger for testing
   workflow_dispatch:
@@ -45,6 +45,8 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/anipos/copybara-docker-image
+    env:
+      GH_TOKEN: ${{ needs.generate-token.outputs.token }}
 
     steps:
       - name: Checkout demo-A repo

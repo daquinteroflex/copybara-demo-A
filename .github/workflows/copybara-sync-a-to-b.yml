@@ -18,8 +18,8 @@ on:
         default: false
 
   # Run on schedule to catch any missed updates
-  schedule:
-    - cron: '0 */6 * * *'  # Every 6 hours
+  # schedule:
+  #   - cron: '0 */6 * * *'  # Every 6 hours
 
 permissions:
   contents: write
@@ -43,6 +43,8 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/anipos/copybara-docker-image
+    env:
+      GH_TOKEN: ${{ needs.generate-token.outputs.token }}
 
     steps:
       - name: Checkout demo-A repo
