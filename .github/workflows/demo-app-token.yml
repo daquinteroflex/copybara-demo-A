@@ -10,22 +10,18 @@ jobs:
   create-token:
     runs-on: ubuntu-latest
     steps:
-      - name: Create Installation Access Token
-        env:
-          GH_TOKEN: ${{ github.token }}
+      # This step exchanges the App ID and Private Key for a temporary Token
+      - name: Generate Token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.COPYBARA_APP_ID }}
+          private-key: ${{ secrets.COPYBARA_APP_PRIVATE_KEY }}
+
+      # Display token info (masked by GitHub Actions)
+      - name: Display Token Info
         run: |
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            /app/installations/104071824/access_tokens \
-            --input - <<< '{
-            "repositories": [
-              "copybara-demo-A",
-              "copybara-demo-B"
-            ],
-            "permissions": {
-              "contents": "read",
-              "metadata": "read"
-            }
-          }'
+          echo "Token generated successfully"
+          echo "Token length: ${#TOKEN}"
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
