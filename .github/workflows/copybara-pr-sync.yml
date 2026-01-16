@@ -30,16 +30,23 @@ permissions:
 jobs:
   import-prs:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/anipos/copybara-docker-image
 
     steps:
+      # Generate GitHub App token for authentication
+      - name: Generate Token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.COPYBARA_APP_ID }}
+          private-key: ${{ secrets.COPYBARA_PRIVATE_KEY }}
+          repositories: copybara-demo-A,copybara-demo-B
+
       - name: Checkout demo-A repo
         uses: actions/checkout@v4
         with:
           repository: daquinteroflex/copybara-demo-A
           fetch-depth: 0
-          token: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           sparse-checkout: |
             copy.bara.sky
             public/test_repo
@@ -56,9 +63,13 @@ jobs:
           echo "=== public/test_repo contents ==="
           ls -la public/test_repo/ || echo "Directory not found"
 
+      - name: Setup Copybara Container
+        run: |
+          docker pull ghcr.io/anipos/copybara-docker-image
+
       - name: Configure Git
         env:
-          GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           git config --global user.name "Copybara Bot"
           git config --global user.email "copybara@example.com"
@@ -91,7 +102,7 @@ jobs:
       - name: Run Copybara PR Import (Specific PR)
         if: inputs.pr_number != ''
         env:
-          GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_NUMBER: ${{ inputs.pr_number }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
@@ -147,7 +158,7 @@ jobs:
       - name: Run Copybara PR Import (All Ready PRs)
         if: inputs.pr_number == ''
         env:
-          GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           echo "=== Current working directory ==="
@@ -245,7 +256,7 @@ jobs:
       - name: Check for created PR
         if: inputs.dry_run != true && success()
         env:
-          GITHUB_TOKEN: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           echo "=== Checking for newly created PRs ==="
           # List recent PRs
