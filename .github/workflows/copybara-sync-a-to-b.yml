@@ -25,12 +25,12 @@ permissions:
   contents: write
 
 jobs:
-  sync-a-to-b:
+  generate-token:
     runs-on: ubuntu-latest
-
+    outputs:
+      token: ${{ steps.app-token.outputs.token }}
     steps:
-      # Generate GitHub App token for authentication
-      - name: Generate Token
+      - name: Generate GitHub App Token
         id: app-token
         uses: actions/create-github-app-token@v2
         with:
@@ -38,12 +38,19 @@ jobs:
           private-key: ${{ secrets.COPYBARA_PRIVATE_KEY }}
           repositories: copybara-demo-A,copybara-demo-B
 
+  sync-a-to-b:
+    needs: generate-token
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/anipos/copybara-docker-image
+
+    steps:
       - name: Checkout demo-A repo
         uses: actions/checkout@v4
         with:
           repository: daquinteroflex/copybara-demo-A
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ needs.generate-token.outputs.token }}
           sparse-checkout: |
             copy.bara.sky
             public/test_repo
@@ -62,13 +69,9 @@ jobs:
           echo "=== public/test_repo contents ==="
           ls -la public/test_repo/ || echo "Directory not found"
 
-      - name: Setup Copybara Container
-        run: |
-          docker pull ghcr.io/anipos/copybara-docker-image
-
       - name: Configure Git
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ needs.generate-token.outputs.token }}
         run: |
           git config --global user.name "Copybara Bot"
           git config --global user.email "copybara@example.com"
@@ -80,7 +83,7 @@ jobs:
 
       - name: Run Copybara Sync A→B
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ needs.generate-token.outputs.token }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           echo "=== Syncing from demo-A to demo-B ==="
@@ -116,7 +119,7 @@ jobs:
       - name: Verify sync in demo-B
         if: inputs.dry_run != true && success()
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ needs.generate-token.outputs.token }}
         run: |
           echo "=== Checking recent commits in demo-B ==="
           # Clone demo-B and check recent commits

@@ -34,8 +34,7 @@ Add these values to your repository under **Settings > Secrets and variables > A
 | Name | Type | Value Source |
 | :--- | :--- | :--- |
 | `COPYBARA_APP_ID` | **Variable** | Found in the "About" section of your App settings. |
-| `COPYBARA_APP_PRIVATE_KEY` | **Secret** | The entire text content of the downloaded `.pem` file. |
-| `COPYBARA_DEMO_TOKEN` | **Secret** | (Optional) A PAT or specific token used for testing. |
+| `COPYBARA_PRIVATE_KEY` | **Secret** | The entire text content of the downloaded `.pem` file. |
 
 ---
 
