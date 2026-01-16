@@ -27,8 +27,10 @@ permissions:
 jobs:
   generate-token:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
-      token: ${{ steps.generate-token.outputs.token }}
+      token: ${{ steps.app-token.outputs.token }}
     steps:
       - name: Generate GitHub App Token
         id: app-token
@@ -37,10 +39,7 @@ jobs:
           app-id: ${{ vars.COPYBARA_APP_ID }}
           private-key: ${{ secrets.COPYBARA_PRIVATE_KEY }}
           repositories: copybara-demo-A,copybara-demo-B
-
-      - name: Export token as output
-        id: generate-token
-        run: echo "token=${{ steps.app-token.outputs.token }}" >> $GITHUB_OUTPUT
+          owner: daquinteroflex
 
   sync-a-to-b:
     needs: generate-token
@@ -51,6 +50,42 @@ jobs:
       GH_TOKEN: ${{ needs.generate-token.outputs.token }}
 
     steps:
+      - name: Verify Token from Job Output
+        run: |
+          echo "=== Token Verification (from job output) ==="
+          if [ -z "${{ needs.generate-token.outputs.token }}" ]; then
+            echo "❌ ERROR: Token is empty or not set"
+            echo "Token from generate-token job is not available"
+            exit 1
+          fi
+          TOKEN_LENGTH=${#TOKEN}
+          echo "✅ Token received successfully"
+          echo "Token length: ${TOKEN_LENGTH} characters"
+        env:
+          TOKEN: ${{ needs.generate-token.outputs.token }}
+
+      - name: Test Generate Token Inside Container
+        id: container-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.COPYBARA_APP_ID }}
+          private-key: ${{ secrets.COPYBARA_PRIVATE_KEY }}
+          repositories: copybara-demo-A,copybara-demo-B
+          owner: daquinteroflex
+
+      - name: Verify Container Token
+        run: |
+          echo "=== Token Verification (generated in container) ==="
+          if [ -z "${{ steps.container-token.outputs.token }}" ]; then
+            echo "❌ ERROR: Container token generation failed"
+            exit 1
+          fi
+          TOKEN_LENGTH=${#TOKEN}
+          echo "✅ Container token generated successfully"
+          echo "Token length: ${TOKEN_LENGTH} characters"
+        env:
+          TOKEN: ${{ steps.container-token.outputs.token }}
+
       - name: Checkout demo-A repo
         uses: actions/checkout@v4
         with:

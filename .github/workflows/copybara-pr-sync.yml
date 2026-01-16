@@ -30,8 +30,11 @@ permissions:
 jobs:
   generate-token:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
-      token: ${{ steps.generate-token.outputs.token }}
+      token: ${{ steps.app-token.outputs.token }}
     steps:
       - name: Generate GitHub App Token
         id: app-token
@@ -40,10 +43,7 @@ jobs:
           app-id: ${{ vars.COPYBARA_APP_ID }}
           private-key: ${{ secrets.COPYBARA_PRIVATE_KEY }}
           repositories: copybara-demo-A,copybara-demo-B
-
-      - name: Export token as output
-        id: generate-token
-        run: echo "token=${{ steps.app-token.outputs.token }}" >> $GITHUB_OUTPUT
+          owner: daquinteroflex
 
   import-prs:
     needs: generate-token
@@ -54,6 +54,20 @@ jobs:
       GH_TOKEN: ${{ needs.generate-token.outputs.token }}
 
     steps:
+      - name: Verify Token
+        run: |
+          echo "=== Token Verification ==="
+          if [ -z "${{ needs.generate-token.outputs.token }}" ]; then
+            echo "❌ ERROR: Token is empty or not set"
+            echo "Token from generate-token job is not available"
+            exit 1
+          fi
+          TOKEN_LENGTH=${#TOKEN}
+          echo "✅ Token received successfully"
+          echo "Token length: ${TOKEN_LENGTH} characters"
+        env:
+          TOKEN: ${{ needs.generate-token.outputs.token }}
+
       - name: Checkout demo-A repo
         uses: actions/checkout@v4
         with:
