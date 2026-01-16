@@ -28,15 +28,13 @@ permissions:
   pull-requests: write
 
 jobs:
-  generate-token:
+  import-prs:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    outputs:
-      token: ${{ steps.app-token.outputs.token }}
+    container:
+      image: ghcr.io/anipos/copybara-docker-image
+
     steps:
-      - name: Generate GitHub App Token
+      - name: Generate Token Inside Container
         id: app-token
         uses: actions/create-github-app-token@v2
         with:
@@ -45,35 +43,25 @@ jobs:
           repositories: copybara-demo-A,copybara-demo-B
           owner: daquinteroflex
 
-  import-prs:
-    needs: generate-token
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/anipos/copybara-docker-image
-    env:
-      GH_TOKEN: ${{ needs.generate-token.outputs.token }}
-
-    steps:
       - name: Verify Token
         run: |
           echo "=== Token Verification ==="
-          if [ -z "${{ needs.generate-token.outputs.token }}" ]; then
-            echo "❌ ERROR: Token is empty or not set"
-            echo "Token from generate-token job is not available"
+          if [ -z "${{ steps.app-token.outputs.token }}" ]; then
+            echo "❌ ERROR: Token generation inside container failed"
             exit 1
           fi
           TOKEN_LENGTH=${#TOKEN}
-          echo "✅ Token received successfully"
+          echo "✅ Token generated successfully inside container"
           echo "Token length: ${TOKEN_LENGTH} characters"
         env:
-          TOKEN: ${{ needs.generate-token.outputs.token }}
+          TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Checkout demo-A repo
         uses: actions/checkout@v4
         with:
           repository: daquinteroflex/copybara-demo-A
           fetch-depth: 0
-          token: ${{ needs.generate-token.outputs.token }}
+          token: ${{ steps.app-token.outputs.token }}
           sparse-checkout: |
             copy.bara.sky
             public/test_repo
@@ -92,7 +80,7 @@ jobs:
 
       - name: Configure Git
         env:
-          GITHUB_TOKEN: ${{ needs.generate-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           git config --global user.name "Copybara Bot"
           git config --global user.email "copybara@example.com"
@@ -125,7 +113,7 @@ jobs:
       - name: Run Copybara PR Import (Specific PR)
         if: inputs.pr_number != ''
         env:
-          GITHUB_TOKEN: ${{ needs.generate-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_NUMBER: ${{ inputs.pr_number }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
@@ -181,7 +169,7 @@ jobs:
       - name: Run Copybara PR Import (All Ready PRs)
         if: inputs.pr_number == ''
         env:
-          GITHUB_TOKEN: ${{ needs.generate-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           echo "=== Current working directory ==="
@@ -279,7 +267,7 @@ jobs:
       - name: Check for created PR
         if: inputs.dry_run != true && success()
         env:
-          GITHUB_TOKEN: ${{ needs.generate-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           echo "=== Checking for newly created PRs ==="
           # List recent PRs

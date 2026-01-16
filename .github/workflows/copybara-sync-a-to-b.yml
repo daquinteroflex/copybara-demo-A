@@ -25,25 +25,7 @@ permissions:
   contents: write
 
 jobs:
-  generate-token:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    outputs:
-      token: ${{ steps.app-token.outputs.token }}
-    steps:
-      - name: Generate GitHub App Token
-        id: app-token
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ vars.COPYBARA_APP_ID }}
-          private-key: ${{ secrets.COPYBARA_PRIVATE_KEY }}
-          repositories: copybara-demo-A,copybara-demo-B
-          owner: daquinteroflex
-
   sync-a-to-b:
-    # NOTE: Testing token generation inside container - removed needs dependency
-    # needs: generate-token
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/anipos/copybara-docker-image
