@@ -10,13 +10,34 @@ jobs:
   create-token:
     runs-on: ubuntu-latest
     steps:
+      # Validate required secrets and variables are configured
+      - name: Validate Configuration
+        run: |
+          echo "Checking required secrets and variables..."
+
+          if [ -z "${{ vars.COPYBARA_APP_ID }}" ]; then
+            echo "❌ ERROR: COPYBARA_APP_ID variable is not set"
+            echo "Please add it in Settings > Secrets and variables > Actions > Variables"
+            exit 1
+          fi
+
+          if [ -z "${{ secrets.COPYBARA_PRIVATE_KEY }}" ]; then
+            echo "❌ ERROR: COPYBARA_PRIVATE_KEY secret is not set"
+            echo "Please add it in Settings > Secrets and variables > Actions > Secrets"
+            echo "Value should be the full content of your GitHub App's .pem private key file"
+            exit 1
+          fi
+
+          echo "✅ All required configuration is present"
+          echo "App ID: ${{ vars.COPYBARA_APP_ID }}"
+
       # This step exchanges the App ID and Private Key for a temporary Token
       - name: Generate Token
         id: app-token
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.COPYBARA_APP_ID }}
-          private-key: ${{ secrets.COPYBARA_APP_PRIVATE_KEY }}
+          private-key: ${{ secrets.COPYBARA_PRIVATE_KEY }}
 
       # Display token info (masked by GitHub Actions)
       - name: Display Token Info

@@ -27,16 +27,23 @@ permissions:
 jobs:
   sync-a-to-b:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/anipos/copybara-docker-image
 
     steps:
+      # Generate GitHub App token for authentication
+      - name: Generate Token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.COPYBARA_APP_ID }}
+          private-key: ${{ secrets.COPYBARA_APP_PRIVATE_KEY }}
+          repositories: copybara-demo-A,copybara-demo-B
+
       - name: Checkout demo-A repo
         uses: actions/checkout@v4
         with:
           repository: daquinteroflex/copybara-demo-A
           fetch-depth: 0
-          token: ${{ secrets.COPYBARA_DEMO_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           sparse-checkout: |
             copy.bara.sky
             public/test_repo
