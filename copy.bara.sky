@@ -36,7 +36,7 @@ core.workflow(
     ],
 
     # Mode for handling the sync
-    mode = "SQUASH",
+    mode = "ITERATIVE",
 )
 
 # Workflow 2: B → A (Contribution Flow)
@@ -68,7 +68,7 @@ core.workflow(
     ],
 
     # Mode for handling the sync
-    mode = "SQUASH",
+    mode = "ITERATIVE",
 )
 
 # ============================================================================
